@@ -212,16 +212,14 @@ class Obstacle:
     def chars(self) -> List[str]:
         """Return list of strings to draw, bottom row first."""
         if self.kind == 'err':
-            return ['▐' + '▌' * self.width, '[' + 'ERR' + ']']
+            return ['█' * (self.width + 1), '▐' + '▌' * self.width]
         elif self.kind == 'mem':
             return ['▄' * (self.width + 2)]
         elif self.kind == 'oom':
-            return ['|' + '=' * self.width + '|',
-                    '|' + 'OOM' + '|',
-                    '|' + '=' * self.width + '|']
+            return ['█' * (self.width + 2), '█' * (self.width + 2), '▄' * (self.width + 2)]
         elif self.kind == 'net':
             return ['≋' * (self.width + 2)]
-        return ['???']
+        return ['??']
 
 
 @dataclass
@@ -495,8 +493,8 @@ class SlurmRunner:
         self.sw  = self.sx1 - self.sx0 + 1
         self.sh  = self.sy1 - self.sy0 + 1
 
-        # Ground row: one row above screen interior bottom (sy1 holds footer text)
-        self.ground_row = self.sy1 - 1
+        # ground_row: player/obstacles stand here; tiles drawn at ground_row+1; sy1 is footer
+        self.ground_row = self.sy1 - 2
 
         self.sky_rows  = max(1, self.sh // 3)
         self.hud_row   = self.sy0
@@ -510,11 +508,10 @@ class SlurmRunner:
 
     def _world_to_screen_row(self, wy: float) -> int:
         """
-        world_y=0 → ground_row - 1 (one row above ground tiles).
-        world_y=1 → ground_row - 2, etc.
-        Keeps sprites visually ON TOP of the ground row.
+        world_y=0 → ground_row (player feet at ground level; tiles at ground_row+1).
+        world_y=1 → ground_row - 1, etc.
         """
-        return self.ground_row - 1 - int(wy)
+        return self.ground_row - int(wy)
 
     # ------------------------------------------------------------------
     # Game logic
@@ -765,6 +762,22 @@ class SlurmRunner:
         self._safe_addstr(spd_row,     cx, 'SPD',   dim)
         self._safe_addstr(spd_row + 1, cx, f'{self.scroll_speed:.1f}x', cab_bold)
 
+        # Cluster stats panel
+        cw = w - self.divider - 3   # available width in ctrl column
+        r = spd_row + 3
+        nd_total = max(1, self.stats.nodes_total)
+        nd_up    = nd_total - self.stats.nodes_down - self.stats.nodes_draining
+        self._safe_addstr(r,     cx, 'NODES', dim)
+        self._safe_addstr(r + 1, cx, f'{nd_up}/{nd_total}'[:cw], cab_bold)
+        self._safe_addstr(r + 3, cx, 'JOBS',  dim)
+        self._safe_addstr(r + 4, cx, f'{self.stats.jobs_running}R'[:cw], cab_bold)
+        self._safe_addstr(r + 5, cx, f'{self.stats.jobs_pending}P'[:cw], dim)
+        pw_bar = 8
+        filled = int(self.stats.cpu_pct * pw_bar)
+        bar    = '█' * filled + '░' * (pw_bar - filled)
+        self._safe_addstr(r + 7, cx, 'LOAD',  dim)
+        self._safe_addstr(r + 8, cx, bar[:cw], self._attr(C_HUD, bold=True))
+
         # Bottom grille separator
         bot_sep = '├' + '─' * (dv - 1) + '┴' + '─' * (w - dv - 2) + '┤'
         self._safe_addstr(self.grille_row, 0, bot_sep[:w - 1], cab_bold)
@@ -803,7 +816,7 @@ class SlurmRunner:
             if self.sx0 <= col <= self.sx1 and not tile.pit:
                 attr = (self._attr(C_CRUMBLE, bold=True) if tile.crumble
                         else self._attr(C_GROUND, bold=True))
-                self._safe_addstr(self.ground_row, col, tile.char, attr)
+                self._safe_addstr(self.ground_row + 1, col, tile.char, attr)
 
     def _draw_obstacles(self):
         for obs in self.obstacles:
@@ -820,7 +833,7 @@ class SlurmRunner:
             else:
                 attr     = (self._attr(C_NETCLOG, bold=True) if obs.kind == 'net'
                             else self._attr(C_OBSTACLE, bold=True))
-                base_row = self._world_to_screen_row(0)
+                base_row = self.ground_row
                 for i, line in enumerate(lines):
                     row = base_row - i
                     if self.play_sy0 <= row <= self.ground_row:
@@ -846,7 +859,7 @@ class SlurmRunner:
 
         for i, line in enumerate(sprite):
             row = base_row - i
-            if self.play_sy0 <= row <= self.ground_row - 1:
+            if self.play_sy0 <= row <= self.ground_row:
                 self._safe_addstr(row, col, line, attr)
 
     def _draw_footer(self):
