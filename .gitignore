@@ -1,0 +1,9 @@
+# Whitelist: only allow tracked game files
+*
+!.gitignore
+!manifest.json
+!slurm_runner.py
+!packet_surfer.py
+!node_hopper.py
+!kernel_panic.py
+!__init__.py

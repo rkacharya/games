@@ -1,0 +1,10 @@
+{
+  "cartridges": {
+    "runner": {
+      "name": "SLURM Runner",
+      "file": "slurm_runner.py",
+      "entry": "SlurmRunner"
+    }
+  },
+  "default": "runner"
+}
